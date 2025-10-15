@@ -2,16 +2,11 @@ import re
 import time
 import random
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
 from urllib.request import urlopen
-
-
+import csv
 from bs4 import BeautifulSoup
-from urllib3.util import url
-
 
 URL_BASE = "https://books.toscrape.com/"
-
 
 
 def get_bs(url):
@@ -24,6 +19,7 @@ def get_bs(url):
     except HTTPError as e:
         print(e)
     except URLError as e:
+        print(e)
         print("Erro na url")
     return None
 
@@ -33,8 +29,7 @@ def get_categories(url):
 
     bs = get_bs(url)
 
-    ##Lista de retorno
-    categories_link_list = set()
+    #print("Visitando: "+url)
 
     try:
 
@@ -49,7 +44,7 @@ def get_categories(url):
         if not categories_list:
             print("Não foi possível acessar a lista de categorias")
 
-
+        all_links = []
         for category in categories_list:
             link_tag = category.find("a")
             if not link_tag:
@@ -57,12 +52,28 @@ def get_categories(url):
             href = link_tag.get("href")
             if not href:
                 continue
-            categories_link_list.add(URL_BASE + href)
+            all_links.append(URL_BASE + href)
+
+
+        # Seleciona 5 aleatórios (ou menos, se tiver menos de 5)
+        sample_size = min(5, len(all_links))
+        random_links = random.sample(all_links, sample_size)
+
+        # Converte pra set se quiser manter a estrutura original
+        categories_link_list = set(random_links)
+
+        #print(f"len(categories_link_list): {len(categories_link_list)}")
+
+        # for category in categories_link_list:
+        #     print(category)
+
+
 
         return categories_link_list
 
     except AttributeError as e:
         print("Tag não encontrada")
+        print(e)
         return None
     except Exception as e:
         print(e)
@@ -71,9 +82,10 @@ def get_categories(url):
 
 def get_books(url, list_of_books_links=None):
     """Retorna todos os livros de uma página de categoria"""
-
     if url is None:
         return list_of_books_links
+
+    print("Extraindo livros da url: " + url)
 
     if list_of_books_links is None:
         list_of_books_links = set()
@@ -81,16 +93,16 @@ def get_books(url, list_of_books_links=None):
     bs = get_bs(url)
 
     try:
-        print("Pegando livros...   " )
+        #print("Visitando: "+url )
         books_section = bs.find("section")
         if not books_section:
             print("Não foi possível encortrar a seção de livros")
-            return None
+            return list_of_books_links
 
         list_of_books = books_section.find("ol").find_all("li")
         if not list_of_books:
             print("Não foi possível acessar a lista de livros")
-            return None
+            return list_of_books_links
 
         for book in list_of_books:
             link_tag = book.find("a")
@@ -107,7 +119,7 @@ def get_books(url, list_of_books_links=None):
         link_next_page = bs.find("li", class_="next")
         if not link_next_page:
             print("Esta categoria não possui mais páginas")
-            return None
+            return list_of_books_links
 
         link_next_page = link_next_page.find("a").get("href")
 
@@ -122,14 +134,89 @@ def get_books(url, list_of_books_links=None):
         print(e)
         return None
 
+def clean_price(string, regex_price, regex_dot):
 
+    clean = regex_price.sub("", string)
+    clean = regex_dot.sub(',', clean)
+
+    return clean
+
+def scrapBookPage(url):
+    regex_number = re.compile(r'\((\d+)\s+available\)')
+    regex_price = re.compile(r'[^0-9.]')
+    regex_dot = re.compile(r'\.')
+
+    print("Extraindo dados do livro: " + url)
+
+    try:
+        bs = get_bs(url)
+
+        ##title
+        title_text = bs.find("h1").text
+        title =  title_text if title_text else None
+
+        ##price
+        price_tag = bs.find("p", class_="price_color")
+        price = clean_price(price_tag.text, regex_price, regex_dot) if price_tag else None
+
+        ##Category
+        category = None
+        breadcrumb = bs.find("ul", class_="breadcrumb")
+        if breadcrumb:
+            active_li = breadcrumb.find("li", class_="active")
+            if active_li:
+                previous_li = active_li.find_previous_sibling("li")
+                category = previous_li.get_text(strip = True) if previous_li else None
+
+        #Rating
+        p = bs.find("p", class_="star-rating")
+        rating = p.get("class")[-1] if p else None
+
+        ##Stock
+        table = bs.find("table")
+        stock = None
+        if table:
+            th = table.find("th", string="Availability")
+            td =  th.find_next_sibling("td") if th else None
+            if td:
+                number = regex_number.search(td.text)
+                stock = number.group(1) if number else None
+
+        return {
+            "title": title,
+            "price": price,
+            "category": category,
+            "rating": rating,
+            "stock": stock
+        }
+
+
+
+    except AttributeError as e:
+        print("Tag nao encontrada")
+
+def createCSV(data_books):
+    with open('teste.csv', 'w', newline='') as csvfile:
+        fieldnames = ['title', 'price', 'category', 'rating', 'stock']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for book in data_books:
+            writer.writerow(book)
 
 def main():
+    #Pega categorias
     categories_link = get_categories(URL_BASE)
 
+    book_links = set()
+    #Itera sobre a lista de link categoria buscando links de livros
+    for category in categories_link:
+        get_books(category, book_links)
 
+    ##Scrap books
+    data_books = []
+    for book in book_links:
+        data_books.append(scrapBookPage(book))
 
-fd = "https://books.toscrape.com/catalogue/wall-and-piece_971/index.html"
+    createCSV(data_books)
 
-ls = get_bs(fd)
-
+main()
