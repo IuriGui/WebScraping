@@ -21,6 +21,8 @@ def get_bs(url):
     except URLError as e:
         print(e)
         print("Erro na url")
+    except Exception as e:
+        print(e)
     return None
 
 
@@ -47,26 +49,20 @@ def get_categories(url):
         all_links = []
         for category in categories_list:
             link_tag = category.find("a")
-            if not link_tag:
-                continue
+            # if not link_tag:
+            #     continue
             href = link_tag.get("href")
-            if not href:
-                continue
+            # if not href:
+            #     continue
             all_links.append(URL_BASE + href)
 
 
-        # Seleciona 5 aleatórios (ou menos, se tiver menos de 5)
+
         sample_size = min(5, len(all_links))
         random_links = random.sample(all_links, sample_size)
 
-        # Converte pra set se quiser manter a estrutura original
+
         categories_link_list = set(random_links)
-
-        #print(f"len(categories_link_list): {len(categories_link_list)}")
-
-        # for category in categories_link_list:
-        #     print(category)
-
 
 
         return categories_link_list
@@ -91,48 +87,43 @@ def get_books(url, list_of_books_links=None):
         list_of_books_links = set()
 
     bs = get_bs(url)
+    if bs is None:
+        return list_of_books_links
 
     try:
         #print("Visitando: "+url )
         books_section = bs.find("section")
-        if not books_section:
-            print("Não foi possível encortrar a seção de livros")
-            return list_of_books_links
 
         list_of_books = books_section.find("ol").find_all("li")
-        if not list_of_books:
-            print("Não foi possível acessar a lista de livros")
-            return list_of_books_links
-
         for book in list_of_books:
             link_tag = book.find("a")
             if not link_tag:
-                print("Tag <a> não encontrada")
+                #print("Tag <a> não encontrada")
                 continue
             href = link_tag.get("href")
             if not href:
-                print("Href não encontrado")
+                #print("Href não encontrado")
                 continue
+
             href = href.replace("../../..", "")
             list_of_books_links.add(URL_BASE + "catalogue" + href)
 
         link_next_page = bs.find("li", class_="next")
-        if not link_next_page:
-            print("Esta categoria não possui mais páginas")
-            return list_of_books_links
-
-        link_next_page = link_next_page.find("a").get("href")
-
         if link_next_page:
-            new_url = re.sub(r'[^/]+$', link_next_page, url)
-            #print(link_next_page)
-            get_books(new_url, list_of_books_links)
+            link_next_page = link_next_page.find("a").get("href")
+            if link_next_page:
+                new_url = re.sub(r'[^/]+$', link_next_page, url)
+                # print(link_next_page)
+                get_books(new_url, list_of_books_links)
+
+
+
 
         return list_of_books_links
 
     except AttributeError as e:
         print(e)
-        return None
+        return list_of_books_links
 
 def clean_price(string, regex_price, regex_dot):
 
@@ -193,15 +184,28 @@ def scrapBookPage(url):
 
 
     except AttributeError as e:
-        print("Tag nao encontrada")
+        print(e)
+        return None
+    except Exception as e:
+        print(e)
 
 def createCSV(data_books):
-    with open('teste.csv', 'w', newline='') as csvfile:
-        fieldnames = ['title', 'price', 'category', 'rating', 'stock']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        for book in data_books:
-            writer.writerow(book)
+    try:
+        with open('catalogo_livros.csv', 'w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['title', 'price', 'category', 'rating', 'stock']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for book in data_books:
+                writer.writerow(book)
+
+        print("CSV criado com sucesso!")
+
+    except IOError as e:
+        print("Erro ao abrir/escrever o arquivo:", e)
+    except Exception as e:
+        print("Erro inesperado ao criar CSV:", e)
+
 
 def main():
     #Pega categorias
