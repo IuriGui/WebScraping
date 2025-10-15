@@ -2,19 +2,24 @@ import re
 import time
 import random
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 import csv
 from bs4 import BeautifulSoup
 
 URL_BASE = "https://books.toscrape.com/"
 
+HEADER = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+}
+
 
 def get_bs(url):
     """Acessa a url, retorna o objeto beatifulSoup e agurda o tempinho pela educação"""
     try:
-        html = urlopen(url)
+        req = Request(url, headers=HEADER)
+        html = urlopen(req)
         bs_obj = BeautifulSoup(html, "html.parser")
-        #time.sleep(random.uniform(2, 5))
+        time.sleep(random.uniform(2, 5))
         return bs_obj
     except HTTPError as e:
         print(e)
